@@ -1,54 +1,75 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
+from streamlit_option_menu import option_menu
 
-# Load Data
-df = pd.read_csv("cleaned_production_data.csv")
-df["Date"] = pd.to_datetime(df["Date"])
+# Set page config
+st.set_page_config(page_title="Chemical Production Dashboard", layout="wide")
 
-# Streamlit Title
-st.title("📊 Chemical Manufacturing Dashboard")
+# Sidebar with logo
+st.sidebar.image("assets/logo.png", width=150)  # Ensure correct path
 
-# Sidebar Filters
-st.sidebar.header("Filter Data")
-selected_date = st.sidebar.date_input("Select Date Range", [df["Date"].min(), df["Date"].max()])
-df_filtered = df[(df["Date"] >= pd.to_datetime(selected_date[0])) & (df["Date"] <= pd.to_datetime(selected_date[1]))]
+# Sidebar navigation
+selected = option_menu(
+    menu_title="Navigation",
+    options=["Dashboard", "Production Trends", "Raw Materials", "Quality Control"],
+    icons=["bar-chart", "line-chart", "boxes", "clipboard-check"],
+    menu_icon="menu-app",
+    default_index=0,
+)
 
-# Production Units Chart
-st.subheader("📌 Production Units Over Time")
-fig, ax = plt.subplots(figsize=(10, 5))
-sns.lineplot(x=df_filtered["Date"], y=df_filtered["Production_Units"], marker="o", ax=ax)
-plt.xlabel("Date")
-plt.ylabel("Production Units")
-st.pyplot(fig)
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_csv("data/cleaned_production_data.csv")  # Ensure correct path
+    df["Date"] = pd.to_datetime(df["Date"]).dt.date  # Convert Timestamp to datetime.date
+    return df
 
-# Sales Units Chart
-st.subheader("📌 Sales Units Trend")
-fig, ax = plt.subplots(figsize=(10, 5))
-sns.lineplot(x=df_filtered["Date"], y=df_filtered["Sales_Units"], marker="o", ax=ax, color="green")
-plt.xlabel("Date")
-plt.ylabel("Sales Units")
-st.pyplot(fig)
+df = load_data()
 
-# Defect Rate Scatter Plot
-st.subheader("📌 Defect Rate vs Production Units")
-fig, ax = plt.subplots(figsize=(8, 5))
-sns.scatterplot(x=df_filtered["Production_Units"], y=df_filtered["Defect_Rate(%)"], color="red", ax=ax)
-plt.xlabel("Production Units")
-plt.ylabel("Defect Rate (%)")
-st.pyplot(fig)
+# Main Dashboard Content
+if selected == "Dashboard":
+    st.title("Chemical Production Overview")
 
-# Machine Downtime Bar Chart
-st.subheader("📌 Machine Downtime Per Day")
-fig, ax = plt.subplots(figsize=(8, 5))
-sns.barplot(x=df_filtered["Date"].dt.strftime("%Y-%m-%d"), y=df_filtered["Machine_Downtime(Hours)"], color="purple", ax=ax)
-plt.xticks(rotation=90)
-plt.xlabel("Date")
-plt.ylabel("Machine Downtime (Hours)")
-st.pyplot(fig)
+    # Date Filter
+    min_date, max_date = st.slider(
+        "Select Date Range:", 
+        min_value=min(df["Date"]), 
+        max_value=max(df["Date"]), 
+        value=(min(df["Date"]), max(df["Date"]))
+    )
 
-# Summary Statistics
-st.subheader("📌 Summary Statistics")
-st.write(df_filtered.describe())
+    # Apply date filter
+    filtered_df = df[(df["Date"] >= min_date) & (df["Date"] <= max_date)]
 
+    # KPI Metricss
+    total_production = filtered_df["Production_Units"].sum()
+    avg_defect_rate = filtered_df["Defect_Rate(%)"].mean()
+
+    col1, col2 = st.columns(2)
+    col1.metric("Total Production (Units)", f"{total_production:,.0f}")
+    col2.metric("Average Defect Rate (%)", f"{avg_defect_rate:.2f}")
+
+    # Production Trends
+    fig = px.line(
+        filtered_df, x="Date", y="Production_Units",
+        title="📈 Production Units Over Time",
+        labels={"Production_Units": "Units"}
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# Additional Sections
+elif selected == "Production Trends":
+    st.title("📊 Production Trends Analysis")
+    fig = px.bar(df, x="Date", y="Production_Units", title="📊 Daily Production")
+    st.plotly_chart(fig, use_container_width=True)
+
+elif selected == "Raw Materials":
+    st.title("📦 Raw Materials Usage")
+    fig = px.pie(df, names="Sales_Units", values="Production_Units", title="⚖️ Sales vs Production")
+    st.plotly_chart(fig, use_container_width=True)
+
+elif selected == "Quality Control":
+    st.title("🔬 Quality Control Insights")
+    fig = px.scatter(df, x="Date", y="Defect_Rate(%)", title="📏 Defect Rate Over Time")
+    st.plotly_chart(fig, use_container_width=True)
